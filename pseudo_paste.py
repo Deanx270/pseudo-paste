@@ -225,7 +225,7 @@ class PseudoPasteApp(ctk.CTk):
         # Text Box
         self.textbox = ctk.CTkTextbox(
             input_card,
-            wrap="none",
+            wrap="word",
             font=ctk.CTkFont(family="Consolas", size=13),
             corner_radius=8
         )
@@ -579,9 +579,16 @@ class PseudoPasteApp(ctk.CTk):
                 # Delay between keystrokes
                 delay_sec = base_delay_ms / 1000.0
                 if use_jitter and base_delay_ms > 15:
-                    jitter_range = min(12.0, base_delay_ms * 0.25)
-                    delay_sec += random.uniform(-jitter_range, jitter_range) / 1000.0
-                    delay_sec = max(0.005, delay_sec)
+                    # Realistic human typing cadence with natural standard deviation
+                    if char in " \t":
+                        delay_sec *= random.uniform(1.25, 1.65)
+                    elif char in ".,!?:;":
+                        delay_sec *= random.uniform(1.35, 1.95)
+                    elif char.isupper():
+                        delay_sec *= random.uniform(1.15, 1.4)
+                    else:
+                        delay_sec = random.gauss(base_delay_ms, base_delay_ms * 0.35) / 1000.0
+                    delay_sec = max(0.008, delay_sec)
 
                 time.sleep(delay_sec)
 
