@@ -9,8 +9,10 @@ Pseudo Paste imitates manual keyboard typing into any target application. It is 
 ## Features
 
 - **Hardware-Level Keystroke Emulation:** Dispatches physical virtual key codes and scan codes rather than simple clipboard text injection. Accurately preserves indentation, colons, spaces, and newlines.
-- **Global Emergency Stop:** Press `Backspace` or `Esc` on your keyboard from any application to immediately halt typing.
+- **Configurable Line Break Delay:** Dedicated slider (0ms to 2000ms) to add pauses before and after newlines, preventing buffer drops, lost characters, or corrupted indentation in terminals, shells, and virtual machines.
 - **Adjustable Typing Speed:** Fine-tune key delay (5ms to 200ms) with presets (Fast, VM Ideal, Natural, Slow).
+- **Editor Shortcuts:** Full support for `Ctrl + Backspace` in the input field to delete entire words effortlessly.
+- **Global Emergency Stop:** Press `Backspace` or `Esc` on your keyboard from any application to immediately halt typing.
 - **Human Jitter Mode:** Optional randomized typing rhythm variation to simulate natural human typing.
 - **Caps Lock Detection & Auto-Reset:** Monitors Caps Lock state to prevent case inversion and automatically corrects it prior to typing.
 - **Always on Top:** Floating window switch to monitor progress while interacting with other applications.

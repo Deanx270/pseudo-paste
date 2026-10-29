@@ -127,8 +127,8 @@ class PseudoPasteApp(ctk.CTk):
         super().__init__()
 
         self.title("Pseudo Paste - Simulated Keyboard Typer (VM Compatible)")
-        self.geometry("660x780")
-        self.minsize(560, 640)
+        self.geometry("660x820")
+        self.minsize(560, 680)
 
         # State flags
         self.is_running = False
@@ -231,6 +231,8 @@ class PseudoPasteApp(ctk.CTk):
         )
         self.textbox.pack(fill="both", expand=True, padx=15, pady=(5, 12))
         self.textbox.bind("<KeyRelease>", self._update_stats)
+        self.textbox.bind("<Control-BackSpace>", self._on_ctrl_backspace)
+        self.textbox.bind("<Control-Key-BackSpace>", self._on_ctrl_backspace)
 
         # Settings Card
         settings_card = ctk.CTkFrame(self)
@@ -289,9 +291,34 @@ class PseudoPasteApp(ctk.CTk):
         )
         self.speed_val_label.grid(row=1, column=2, padx=(0, 15), pady=8)
 
+        # Row 2: Line Break Delay
+        ctk.CTkLabel(
+            settings_card,
+            text="Line Delay:",
+            font=ctk.CTkFont(size=13, weight="bold")
+        ).grid(row=2, column=0, padx=(15, 5), pady=8, sticky="w")
+
+        self.line_delay_slider = ctk.CTkSlider(
+            settings_card,
+            from_=0,
+            to=2000,
+            number_of_steps=200,
+            command=self._on_line_delay_slider_change
+        )
+        self.line_delay_slider.set(100)
+        self.line_delay_slider.grid(row=2, column=1, padx=10, pady=8, sticky="ew")
+
+        self.line_delay_val_label = ctk.CTkLabel(
+            settings_card,
+            text="100ms",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            width=45
+        )
+        self.line_delay_val_label.grid(row=2, column=2, padx=(0, 15), pady=8)
+
         # Speed Presets
         presets_frame = ctk.CTkFrame(settings_card, fg_color="transparent")
-        presets_frame.grid(row=2, column=0, columnspan=3, padx=15, pady=(0, 8), sticky="ew")
+        presets_frame.grid(row=3, column=0, columnspan=3, padx=15, pady=(0, 8), sticky="ew")
 
         ctk.CTkLabel(
             presets_frame,
@@ -323,7 +350,7 @@ class PseudoPasteApp(ctk.CTk):
 
         # Options & Caps Lock row
         options_frame = ctk.CTkFrame(settings_card, fg_color="transparent")
-        options_frame.grid(row=3, column=0, columnspan=3, padx=15, pady=(0, 10), sticky="ew")
+        options_frame.grid(row=4, column=0, columnspan=3, padx=15, pady=(0, 10), sticky="ew")
 
         self.jitter_var = ctk.BooleanVar(value=False)
         ctk.CTkCheckBox(
@@ -459,6 +486,48 @@ class PseudoPasteApp(ctk.CTk):
         self.speed_val_label.configure(text=f"{int(val)}ms")
         self._update_preset_highlights(val)
 
+    def _on_line_delay_slider_change(self, val):
+        self.line_delay_val_label.configure(text=f"{int(val)}ms")
+
+    def _on_ctrl_backspace(self, event=None):
+        try:
+            if self.textbox.tag_ranges("sel"):
+                self.textbox.delete("sel.first", "sel.last")
+                self._update_stats()
+                return "break"
+        except tk.TclError:
+            pass
+
+        insert_idx = self.textbox.index("insert")
+        line, col = map(int, insert_idx.split("."))
+        if line == 1 and col == 0:
+            return "break"
+
+        current_line = self.textbox.get(f"{line}.0", f"{line}.{col}")
+        if not current_line:
+            self.textbox.delete(f"{line-1}.end", f"{line}.0")
+            self._update_stats()
+            return "break"
+
+        i = len(current_line) - 1
+        # Skip trailing whitespace (spaces and tabs)
+        while i >= 0 and current_line[i] in " \t":
+            i -= 1
+
+        # Skip preceding word or punctuation sequence
+        if i >= 0:
+            if current_line[i].isalnum() or current_line[i] == "_":
+                while i >= 0 and (current_line[i].isalnum() or current_line[i] == "_"):
+                    i -= 1
+            else:
+                while i >= 0 and not current_line[i].isalnum() and current_line[i] not in " \t" and current_line[i] != "_":
+                    i -= 1
+
+        delete_from_col = i + 1
+        self.textbox.delete(f"{line}.{delete_from_col}", f"{line}.{col}")
+        self._update_stats()
+        return "break" 
+
     def _set_speed(self, val_ms):
         self.speed_slider.set(val_ms)
         self.speed_val_label.configure(text=f"{int(val_ms)}ms")
@@ -543,6 +612,7 @@ class PseudoPasteApp(ctk.CTk):
         try:
             countdown_secs = int(self.delay_slider.get())
             base_delay_ms = float(self.speed_slider.get())
+            line_delay_ms = float(self.line_delay_slider.get())
             use_jitter = self.jitter_var.get()
 
             # Step 1: Countdown Phase
@@ -569,8 +639,14 @@ class PseudoPasteApp(ctk.CTk):
                 if self.stop_requested:
                     break
 
-                # Type through hardware scan code engine
-                HardwareKeyboardEngine.type_character(char)
+                # Apply delay before and after line breaks if configured
+                if char == "\n" and line_delay_ms > 0:
+                    half_line_delay = (line_delay_ms / 1000.0) / 2.0
+                    time.sleep(half_line_delay)
+                    HardwareKeyboardEngine.type_character(char)
+                    time.sleep(half_line_delay)
+                else:
+                    HardwareKeyboardEngine.type_character(char)
 
                 # Update progress
                 progress_ratio = (i + 1) / total_chars
