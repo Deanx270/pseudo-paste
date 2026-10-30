@@ -226,6 +226,9 @@ class PseudoPasteApp(ctk.CTk):
         self.textbox = ctk.CTkTextbox(
             input_card,
             wrap="word",
+            undo=True,
+            maxundo=-1,
+            autoseparators=True,
             font=ctk.CTkFont(family="Consolas", size=13),
             corner_radius=8
         )
@@ -233,6 +236,12 @@ class PseudoPasteApp(ctk.CTk):
         self.textbox.bind("<KeyRelease>", self._update_stats)
         self.textbox.bind("<Control-BackSpace>", self._on_ctrl_backspace)
         self.textbox.bind("<Control-Key-BackSpace>", self._on_ctrl_backspace)
+        self.textbox.bind("<Control-z>", self._on_undo)
+        self.textbox.bind("<Control-Z>", self._on_undo)
+        self.textbox.bind("<Control-y>", self._on_redo)
+        self.textbox.bind("<Control-Y>", self._on_redo)
+        self.textbox.bind("<Control-Shift-Z>", self._on_redo)
+        self.textbox.bind("<Control-Shift-z>", self._on_redo)
 
         # Settings Card
         settings_card = ctk.CTkFrame(self)
@@ -489,10 +498,32 @@ class PseudoPasteApp(ctk.CTk):
     def _on_line_delay_slider_change(self, val):
         self.line_delay_val_label.configure(text=f"{int(val)}ms")
 
+    def _on_undo(self, event=None):
+        try:
+            self.textbox._textbox.edit_undo()
+            self._update_stats()
+        except tk.TclError:
+            pass
+        return "break"
+
+    def _on_redo(self, event=None):
+        try:
+            self.textbox._textbox.edit_redo()
+            self._update_stats()
+        except tk.TclError:
+            pass
+        return "break"
+
     def _on_ctrl_backspace(self, event=None):
+        try:
+            self.textbox._textbox.edit_separator()
+        except Exception:
+            pass
+
         try:
             if self.textbox.tag_ranges("sel"):
                 self.textbox.delete("sel.first", "sel.last")
+                self.textbox._textbox.edit_separator()
                 self._update_stats()
                 return "break"
         except tk.TclError:
@@ -506,6 +537,10 @@ class PseudoPasteApp(ctk.CTk):
         current_line = self.textbox.get(f"{line}.0", f"{line}.{col}")
         if not current_line:
             self.textbox.delete(f"{line-1}.end", f"{line}.0")
+            try:
+                self.textbox._textbox.edit_separator()
+            except Exception:
+                pass
             self._update_stats()
             return "break"
 
@@ -525,6 +560,10 @@ class PseudoPasteApp(ctk.CTk):
 
         delete_from_col = i + 1
         self.textbox.delete(f"{line}.{delete_from_col}", f"{line}.{col}")
+        try:
+            self.textbox._textbox.edit_separator()
+        except Exception:
+            pass
         self._update_stats()
         return "break" 
 
@@ -534,14 +573,30 @@ class PseudoPasteApp(ctk.CTk):
         self._update_preset_highlights(val_ms)
 
     def _clear_text(self):
+        try:
+            self.textbox._textbox.edit_separator()
+        except Exception:
+            pass
         self.textbox.delete("1.0", "end")
+        try:
+            self.textbox._textbox.edit_separator()
+        except Exception:
+            pass
         self._update_stats()
 
     def _paste_clipboard(self):
         try:
             content = self.clipboard_get()
+            try:
+                self.textbox._textbox.edit_separator()
+            except Exception:
+                pass
             self.textbox.delete("1.0", "end")
             self.textbox.insert("1.0", content)
+            try:
+                self.textbox._textbox.edit_separator()
+            except Exception:
+                pass
             self._update_stats()
         except tk.TclError:
             self._set_status("Clipboard is empty or does not contain text.", "#f39c12")
@@ -639,14 +694,19 @@ class PseudoPasteApp(ctk.CTk):
                 if self.stop_requested:
                     break
 
-                # Apply delay before and after line breaks if configured
+                # Type the character immediately
+                HardwareKeyboardEngine.type_character(char)
+
+                # Delay after line break (before starting with the next line)
                 if char == "\n" and line_delay_ms > 0:
-                    half_line_delay = (line_delay_ms / 1000.0) / 2.0
-                    time.sleep(half_line_delay)
-                    HardwareKeyboardEngine.type_character(char)
-                    time.sleep(half_line_delay)
-                else:
-                    HardwareKeyboardEngine.type_character(char)
+                    line_delay_sec = line_delay_ms / 1000.0
+                    elapsed = 0.0
+                    while elapsed < line_delay_sec:
+                        if self.stop_requested:
+                            break
+                        sleep_chunk = min(0.05, line_delay_sec - elapsed)
+                        time.sleep(sleep_chunk)
+                        elapsed += sleep_chunk
 
                 # Update progress
                 progress_ratio = (i + 1) / total_chars
