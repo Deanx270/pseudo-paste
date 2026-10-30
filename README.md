@@ -13,7 +13,7 @@ Pseudo Paste imitates manual keyboard typing into any target application. It is 
 - **Adjustable Typing Speed:** Fine-tune key delay (5ms to 200ms) with presets (Fast, VM Ideal, Natural, Slow).
 - **Editor Shortcuts:** Full support for `Ctrl + Z` (Undo), `Ctrl + Y` (Redo), and `Ctrl + Backspace` (delete entire words) in the input field.
 - **Global Emergency Stop:** Press `Backspace` or `Esc` on your keyboard from any application to immediately halt typing.
-- **Human Jitter Mode:** Optional randomized typing rhythm variation to simulate natural human typing.
+- **Adjustable Human Jitter:** Fine-tune typing rhythm and variance (0% to 100%) with realistic human cadence—including multi-key burst rolls, natural pauses at spaces and punctuation, and occasional micro-hesitations to bypass anti-cheat/cadence detection.
 - **Caps Lock Detection & Auto-Reset:** Monitors Caps Lock state to prevent case inversion and automatically corrects it prior to typing.
 - **Always on Top:** Floating window switch to monitor progress while interacting with other applications.
 - **Modern Interface:** Clean, intuitive dark-mode interface built with CustomTkinter.
