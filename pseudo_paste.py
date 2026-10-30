@@ -127,8 +127,8 @@ class PseudoPasteApp(ctk.CTk):
         super().__init__()
 
         self.title("Pseudo Paste - Simulated Keyboard Typer (VM Compatible)")
-        self.geometry("660x820")
-        self.minsize(560, 680)
+        self.geometry("660x860")
+        self.minsize(560, 720)
 
         # State flags
         self.is_running = False
@@ -325,9 +325,34 @@ class PseudoPasteApp(ctk.CTk):
         )
         self.line_delay_val_label.grid(row=2, column=2, padx=(0, 15), pady=8)
 
+        # Row 3: Adjustable Jitter
+        ctk.CTkLabel(
+            settings_card,
+            text="Jitter:",
+            font=ctk.CTkFont(size=13, weight="bold")
+        ).grid(row=3, column=0, padx=(15, 5), pady=8, sticky="w")
+
+        self.jitter_slider = ctk.CTkSlider(
+            settings_card,
+            from_=0,
+            to=100,
+            number_of_steps=20,
+            command=self._on_jitter_slider_change
+        )
+        self.jitter_slider.set(40)
+        self.jitter_slider.grid(row=3, column=1, padx=10, pady=8, sticky="ew")
+
+        self.jitter_val_label = ctk.CTkLabel(
+            settings_card,
+            text="40%",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            width=45
+        )
+        self.jitter_val_label.grid(row=3, column=2, padx=(0, 15), pady=8)
+
         # Speed Presets
         presets_frame = ctk.CTkFrame(settings_card, fg_color="transparent")
-        presets_frame.grid(row=3, column=0, columnspan=3, padx=15, pady=(0, 8), sticky="ew")
+        presets_frame.grid(row=4, column=0, columnspan=3, padx=15, pady=(0, 8), sticky="ew")
 
         ctk.CTkLabel(
             presets_frame,
@@ -359,15 +384,7 @@ class PseudoPasteApp(ctk.CTk):
 
         # Options & Caps Lock row
         options_frame = ctk.CTkFrame(settings_card, fg_color="transparent")
-        options_frame.grid(row=4, column=0, columnspan=3, padx=15, pady=(0, 10), sticky="ew")
-
-        self.jitter_var = ctk.BooleanVar(value=False)
-        ctk.CTkCheckBox(
-            options_frame,
-            text="Random Jitter",
-            variable=self.jitter_var,
-            font=ctk.CTkFont(size=12)
-        ).pack(side="left", padx=(0, 15))
+        options_frame.grid(row=5, column=0, columnspan=3, padx=15, pady=(0, 10), sticky="ew")
 
         self.beep_var = ctk.BooleanVar(value=True)
         ctk.CTkCheckBox(
@@ -497,6 +514,13 @@ class PseudoPasteApp(ctk.CTk):
 
     def _on_line_delay_slider_change(self, val):
         self.line_delay_val_label.configure(text=f"{int(val)}ms")
+
+    def _on_jitter_slider_change(self, val):
+        pct = int(val)
+        if pct == 0:
+            self.jitter_val_label.configure(text="Off")
+        else:
+            self.jitter_val_label.configure(text=f"{pct}%")
 
     def _on_undo(self, event=None):
         try:
@@ -668,7 +692,7 @@ class PseudoPasteApp(ctk.CTk):
             countdown_secs = int(self.delay_slider.get())
             base_delay_ms = float(self.speed_slider.get())
             line_delay_ms = float(self.line_delay_slider.get())
-            use_jitter = self.jitter_var.get()
+            jitter_pct = float(self.jitter_slider.get())
 
             # Step 1: Countdown Phase
             for remaining in range(countdown_secs, 0, -1):
@@ -689,6 +713,8 @@ class PseudoPasteApp(ctk.CTk):
             # Step 2: Typing Loop using HardwareKeyboardEngine
             normalized_text = text.replace("\r\n", "\n").replace("\r", "\n")
             total_chars = len(normalized_text)
+            in_burst = 0
+            burst_speed = 1.0
 
             for i, char in enumerate(normalized_text):
                 if self.stop_requested:
@@ -713,18 +739,48 @@ class PseudoPasteApp(ctk.CTk):
                 self.after(0, lambda p=progress_ratio, count=i+1, total=total_chars: self._update_progress_ui(p, count, total))
 
                 # Delay between keystrokes
-                delay_sec = base_delay_ms / 1000.0
-                if use_jitter and base_delay_ms > 15:
-                    # Realistic human typing cadence with natural standard deviation
-                    if char in " \t":
-                        delay_sec *= random.uniform(1.25, 1.65)
-                    elif char in ".,!?:;":
-                        delay_sec *= random.uniform(1.35, 1.95)
-                    elif char.isupper():
-                        delay_sec *= random.uniform(1.15, 1.4)
+                if jitter_pct <= 0:
+                    delay_sec = base_delay_ms / 1000.0
+                else:
+                    factor = jitter_pct / 100.0
+                    next_char = normalized_text[i + 1] if (i + 1 < total_chars) else None
+
+                    # 1. Post-punctuation pause (sentence & clause ends)
+                    if char in ".!?":
+                        mult = 1.7 + (1.6 * factor)
+                        in_burst = 0
+                    elif char in ",;:":
+                        mult = 1.35 + (1.1 * factor)
+                        in_burst = 0
+                    # 2. Post-space pause (word transitions)
+                    elif char in " \t":
+                        mult = 1.25 + (0.9 * factor)
+                        in_burst = 0
+                    # 3. Preparation for upcoming uppercase letter
+                    elif next_char and next_char.isupper():
+                        mult = 1.2 + (0.6 * factor)
+                        in_burst = 0
                     else:
-                        delay_sec = random.gauss(base_delay_ms, base_delay_ms * 0.35) / 1000.0
-                    delay_sec = max(0.008, delay_sec)
+                        # 4. Intra-word typing: natural bursts / rolls vs single keys
+                        if in_burst <= 0:
+                            if random.random() < (0.6 * factor):
+                                in_burst = random.randint(2, 4)
+                                burst_speed = random.uniform(0.48, 0.72)
+                            else:
+                                burst_speed = 1.0
+                        else:
+                            burst_speed = random.uniform(0.52, 0.78)
+                            in_burst -= 1
+
+                        mult = burst_speed * (1.0 + random.gauss(0, 0.25 * factor))
+
+                        # 5. Occasional natural typist hesitation (~3% probability)
+                        if random.random() < (0.03 * factor):
+                            mult += random.uniform(1.2, 2.2) * factor
+                            in_burst = 0
+
+                    delay_ms = max(4.0, base_delay_ms * mult)
+                    delay_sec = delay_ms / 1000.0
 
                 time.sleep(delay_sec)
 
